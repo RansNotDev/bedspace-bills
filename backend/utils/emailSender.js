@@ -95,6 +95,8 @@ async function sendPaymentLinkEmail({
     <p>Hi <strong>${nickname}</strong>,</p>
     <p>Your bill for <strong>${monthLabel}</strong> is ready. Please review the breakdown below.</p>
 
+    <p>Amounts below are in <strong>Philippine Peso (PHP)</strong>.</p>
+
     <table class="bill-table">
       <thead>
         <tr><th>Description</th><th>Amount</th></tr>
@@ -102,8 +104,8 @@ async function sendPaymentLinkEmail({
       <tbody>
         <tr><td>⚡ Electricity Share</td><td>${formatPHP(bill.electricityShare)}</td></tr>
         <tr><td>💧 Water Share</td><td>${formatPHP(bill.waterShare)}</td></tr>
-        <tr><td>🚰 Drinking Water</td><td>${formatPHP(bill.drinkingWaterShare)}</td></tr>
-        <tr><td>🗑️ Trash Bags</td><td>${formatPHP(bill.trashBagShare)}</td></tr>
+        <tr><td>🚰 Drinking Water Share</td><td>${formatPHP(bill.drinkingWaterShare)}</td></tr>
+        <tr><td>🗑️ Trash Bags Share</td><td>${formatPHP(bill.trashBagShare)}</td></tr>
         <tr class="total-row"><td>TOTAL</td><td>${formatPHP(bill.totalAmount)}</td></tr>
       </tbody>
     </table>
@@ -144,4 +146,18 @@ async function sendPaymentLinkEmail({
   await transporter.sendMail(mailOptions);
 }
 
-module.exports = { sendPaymentLinkEmail };
+/**
+ * Landlord password reset (after failed login lockout)
+ */
+async function sendAdminPasswordResetOtp({ toEmail, otp, nickname }) {
+  const mailOptions = {
+    from: process.env.EMAIL_FROM,
+    to: toEmail,
+    subject: 'Bedspace Bills — Landlord password reset code',
+    text: `Hi ${nickname},\n\nYour password reset code is: ${otp}\n\nIt expires in 15 minutes.`,
+    html: `<p>Hi <strong>${nickname}</strong>,</p><p>Your reset code is:</p><p style="font-size:24px;font-weight:bold;letter-spacing:4px;">${otp}</p><p>This code expires in 15 minutes.</p>`,
+  };
+  await transporter.sendMail(mailOptions);
+}
+
+module.exports = { sendPaymentLinkEmail, sendAdminPasswordResetOtp };

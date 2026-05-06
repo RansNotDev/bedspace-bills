@@ -190,37 +190,78 @@ router.patch('/tenant-bills/:id/mark-paid', async (req, res) => {
 
 /**
  * GET /api/admin/dashboard-summary
- * Quick stats for admin dashboard
+ * activeTenants: global count
+ * collectionsByMonth: each bill cycle (newest first), with per-cycle totals and each tenant bill row (not one grand total)
  */
 router.get('/dashboard-summary', async (req, res) => {
   try {
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
-
     const activeTenants = await User.countDocuments({ role: 'tenant', isActive: true });
-    const currentCycle = await BillCycle.findOne({ month: currentMonth, year: currentYear });
+    const cycles = await BillCycle.find().sort({ year: -1, month: -1 }).limit(12).lean();
+    const activeTenantDocs = await User.find({ role: 'tenant', isActive: true })
+      .select('nickname roomType')
+      .lean();
 
-    let paidCount = 0;
-    let unpaidCount = 0;
-    let totalCollected = 0;
-    let totalBilled = 0;
+    const collectionsByMonth = [];
 
-    if (currentCycle) {
-      const bills = await TenantBill.find({ billCycleId: currentCycle._id });
-      paidCount = bills.filter((b) => b.isPaid).length;
-      unpaidCount = bills.filter((b) => !b.isPaid).length;
-      totalCollected = bills.filter((b) => b.isPaid).reduce((s, b) => s + b.totalAmount, 0);
-      totalBilled = bills.reduce((s, b) => s + b.totalAmount, 0);
+    for (const cycle of cycles) {
+      const bills = await TenantBill.find({ billCycleId: cycle._id }).populate(
+        'tenantId',
+        'nickname roomType email'
+      );
+
+      const isUnpaid = (b) => b.isPaid !== true;
+
+      let paidCount = bills.filter((b) => b.isPaid === true).length;
+      let unpaidCount = bills.filter(isUnpaid).length;
+      const totalCollected = bills.filter((b) => b.isPaid === true).reduce((s, b) => s + b.totalAmount, 0);
+      const totalBilled = bills.reduce((s, b) => s + b.totalAmount, 0);
+
+      const billedTenantIds = new Set(
+        bills.map((b) => (b.tenantId && b.tenantId._id ? String(b.tenantId._id) : null)).filter(Boolean)
+      );
+
+      const billRows = bills.map((b) => ({
+        tenantBillId: b._id,
+        nickname: b.tenantId?.nickname || 'Unknown',
+        roomType: b.tenantId?.roomType,
+        totalAmount: b.totalAmount,
+        isPaid: b.isPaid === true,
+        notInCycle: false,
+      }));
+      // Unpaid bills first, then paid
+      billRows.sort((a, b) => {
+        if (a.isPaid !== b.isPaid) return a.isPaid ? 1 : -1;
+        return (a.nickname || '').localeCompare(b.nickname || '');
+      });
+
+      for (const t of activeTenantDocs) {
+        if (!billedTenantIds.has(String(t._id))) {
+          unpaidCount += 1;
+          billRows.unshift({
+            tenantBillId: null,
+            tenantUserId: t._id,
+            nickname: t.nickname,
+            roomType: t.roomType,
+            totalAmount: 0,
+            isPaid: false,
+            notInCycle: true,
+          });
+        }
+      }
+
+      collectionsByMonth.push({
+        cycle,
+        paidCount,
+        unpaidCount,
+        totalCollected,
+        totalBilled,
+        billRows,
+      });
     }
 
     res.json({
       activeTenants,
-      currentCycle,
-      paidCount,
-      unpaidCount,
-      totalCollected,
-      totalBilled,
+      collectionsByMonth,
     });
   } catch (err) {
     res.status(500).json({ message: 'Server error' });

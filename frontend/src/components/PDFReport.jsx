@@ -36,9 +36,9 @@ export function generatePDFReport(cycle, tenantBills) {
   doc.setFont('helvetica', 'normal');
 
   const totalBilled = tenantBills.reduce((s, b) => s + b.totalAmount, 0);
-  const totalCollected = tenantBills.filter((b) => b.isPaid).reduce((s, b) => s + b.totalAmount, 0);
-  const paidCount = tenantBills.filter((b) => b.isPaid).length;
-  const unpaidCount = tenantBills.filter((b) => !b.isPaid).length;
+  const totalCollected = tenantBills.filter((b) => b.isPaid === true).reduce((s, b) => s + b.totalAmount, 0);
+  const paidCount = tenantBills.filter((b) => b.isPaid === true).length;
+  const unpaidCount = tenantBills.filter((b) => b.isPaid !== true).length;
 
   const summaryY = 45;
   doc.setFont('helvetica', 'bold');
@@ -46,10 +46,10 @@ export function generatePDFReport(cycle, tenantBills) {
   doc.setFont('helvetica', 'normal');
 
   const summaryData = [
-    ['Electricity Total', formatPHP(cycle.electricityTotal)],
-    ['Water Bill', formatPHP(cycle.waterBill)],
-    ['Drinking Water', formatPHP(cycle.drinkingWater)],
-    ['Trash Bags', formatPHP(cycle.trashBags)],
+    ['Electricity Total (PHP)', formatPHP(cycle.electricityTotal)],
+    ['Water Bill (PHP)', formatPHP(cycle.waterBill)],
+    ['Drinking water pool (PHP)', formatPHP(cycle.drinkingWater)],
+    ['Trash bags pool (PHP)', formatPHP(cycle.trashBags)],
     ['Payment Deadline', formatPHDate(cycle.deadline)],
     ['Total Billed', formatPHP(totalBilled)],
     ['Total Collected', formatPHP(totalCollected)],
@@ -85,12 +85,12 @@ export function generatePDFReport(cycle, tenantBills) {
     formatPHP(bill.drinkingWaterShare),
     formatPHP(bill.trashBagShare),
     formatPHP(bill.totalAmount),
-    bill.isPaid ? '✓ Paid' : '✗ Unpaid',
+    bill.isPaid === true ? '✓ Paid' : '✗ Unpaid',
   ]);
 
   autoTable(doc, {
     startY: tableStartY + 4,
-    head: [['Tenant', 'Room', 'Electricity', 'Water', 'Drinking', 'Trash', 'Total', 'Status']],
+    head: [['Tenant', 'Room', 'Elec.', 'Water', 'Drink.H2O', 'Trash', 'Total', 'Status']],
     body: tableRows,
     theme: 'striped',
     headStyles: {
@@ -103,7 +103,7 @@ export function generatePDFReport(cycle, tenantBills) {
     columnStyles: {
       7: {
         fontStyle: 'bold',
-        textColor: (cell) => (cell.raw.includes('Paid') ? [22, 163, 74] : [220, 38, 38]),
+        textColor: (cell) => (String(cell.raw).includes('Paid') ? [22, 163, 74] : [220, 38, 38]),
       },
     },
     margin: { left: 14, right: 14 },

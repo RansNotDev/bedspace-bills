@@ -21,12 +21,17 @@ router.post('/generate', protect, adminOnly, async (req, res) => {
       year,
       electricityTotal,
       waterBill,
-      drinkingWater = 100,
-      trashBags = 100,
+      drinkingWater: dwIn,
+      trashBags: tbIn,
       deadline,
       gcashNumbers,
       gcashQRImages,
     } = req.body;
+
+    const drinkingWater =
+      dwIn != null && dwIn !== '' ? Number(dwIn) : 100;
+    const trashBags =
+      tbIn != null && tbIn !== '' ? Number(tbIn) : 100;
 
     if (!month || !year || electricityTotal == null || waterBill == null || !deadline) {
       return res.status(400).json({ message: 'Missing required fields' });
@@ -41,7 +46,6 @@ router.post('/generate', protect, adminOnly, async (req, res) => {
       });
     }
 
-    // Create bill cycle
     const cycle = await BillCycle.create({
       month,
       year,
@@ -186,13 +190,9 @@ router.get('/my-bills', protect, async (req, res) => {
  */
 router.get('/my-bills/current', protect, async (req, res) => {
   try {
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
-
-    const cycle = await BillCycle.findOne({ month: currentMonth, year: currentYear });
+    const cycle = await BillCycle.findOne().sort({ year: -1, month: -1 });
     if (!cycle) {
-      return res.status(404).json({ message: 'No bill cycle for current month' });
+      return res.status(404).json({ message: 'No bill cycles yet' });
     }
 
     const bill = await TenantBill.findOne({
@@ -201,7 +201,7 @@ router.get('/my-bills/current', protect, async (req, res) => {
     }).populate('billCycleId');
 
     if (!bill) {
-      return res.status(404).json({ message: 'No bill found for current month' });
+      return res.status(404).json({ message: 'No bill found for the latest cycle' });
     }
 
     res.json(bill);

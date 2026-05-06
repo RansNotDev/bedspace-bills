@@ -16,11 +16,20 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Handle 401 globally — redirect to login
+// Handle 401 globally — redirect to login (except on auth endpoints)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      const url = error.config?.url || '';
+      if (
+        url.includes('/auth/login') ||
+        url.includes('/auth/preflight') ||
+        url.includes('/auth/admin/') ||
+        url.includes('/auth/change-password')
+      ) {
+        return Promise.reject(error);
+      }
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
@@ -30,7 +39,15 @@ api.interceptors.response.use(
 );
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
-export const login = (nickname) => api.post('/auth/login', { nickname });
+export const authPreflight = (nickname) => api.post('/auth/preflight', { nickname });
+export const login = (nickname, password) =>
+  api.post('/auth/login', password !== undefined ? { nickname, password } : { nickname });
+export const requestAdminResetOtp = (nickname) =>
+  api.post('/auth/admin/request-reset-otp', { nickname });
+export const resetAdminPassword = (nickname, otp, newPassword) =>
+  api.post('/auth/admin/reset-password', { nickname, otp, newPassword });
+export const changePassword = (currentPassword, newPassword) =>
+  api.post('/auth/change-password', { currentPassword, newPassword });
 export const getMe = () => api.get('/auth/me');
 
 // ─── ADMIN ────────────────────────────────────────────────────────────────────

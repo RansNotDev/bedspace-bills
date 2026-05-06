@@ -32,6 +32,26 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // Landlord only — used with bcrypt; never returned in API responses by default (select: false)
+    passwordHash: {
+      type: String,
+      default: null,
+      select: false,
+    },
+    adminLoginFailures: {
+      type: Number,
+      default: 0,
+    },
+    adminResetOtpHash: {
+      type: String,
+      default: null,
+      select: false,
+    },
+    adminResetOtpExpires: {
+      type: Date,
+      default: null,
+      select: false,
+    },
   },
   { timestamps: true }
 );

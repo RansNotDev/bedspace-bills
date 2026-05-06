@@ -65,7 +65,9 @@ export default function Layout({ children }) {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-900 truncate">{user?.nickname}</p>
-              <p className="text-xs text-gray-500 capitalize">{user?.roomType}</p>
+              <p className="text-xs text-gray-500 capitalize">
+                {isAdmin ? 'Landlord' : user?.roomType?.replace('-', ' ')}
+              </p>
             </div>
           </div>
           <button

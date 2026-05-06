@@ -9,6 +9,9 @@ export function formatPHP(amount) {
   }).format(amount || 0);
 }
 
+/** Short note for UI — all money amounts are Philippine Peso */
+export const CURRENCY_NOTE = 'All amounts are in Philippine Peso (PHP).';
+
 /**
  * Format a date in Philippine locale (Asia/Manila)
  */

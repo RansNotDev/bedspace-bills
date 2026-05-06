@@ -27,11 +27,11 @@ export default function BillCard({ bill, cycle, showTenantName = false }) {
           <span className="font-medium">{formatPHP(bill.waterShare)}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-gray-600">🚰 Drinking Water</span>
+          <span className="text-gray-600">🚰 Drinking water</span>
           <span className="font-medium">{formatPHP(bill.drinkingWaterShare)}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-gray-600">🗑️ Trash Bags</span>
+          <span className="text-gray-600">🗑️ Trash bags</span>
           <span className="font-medium">{formatPHP(bill.trashBagShare)}</span>
         </div>
         <div className="flex justify-between pt-2 border-t border-gray-200 font-semibold">

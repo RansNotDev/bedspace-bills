@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { getPaymentLinkData } from '../utils/api';
 import QRCodeDisplay from '../components/QRCodeDisplay';
 import ReceiptUpload from '../components/ReceiptUpload';
-import { formatPHP, formatPHDate, getMonthLabel } from '../utils/helpers';
+import { formatPHP, formatPHDate, getMonthLabel, CURRENCY_NOTE } from '../utils/helpers';
 
 export default function PaymentLinkPage() {
   const { token } = useParams();
@@ -83,6 +83,7 @@ export default function PaymentLinkPage() {
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Bedspace Bill Manager</h1>
           <p className="text-gray-500 text-sm">Payment for {monthLabel}</p>
+          <p className="text-gray-400 text-xs mt-1">{CURRENCY_NOTE}</p>
         </div>
 
         {/* Tenant info */}
@@ -111,11 +112,11 @@ export default function PaymentLinkPage() {
               <span className="font-medium">{formatPHP(bill.waterShare)}</span>
             </div>
             <div className="flex justify-between py-2 border-b border-gray-100">
-              <span className="text-gray-600">🚰 Drinking Water</span>
+              <span className="text-gray-600">🚰 Drinking water share</span>
               <span className="font-medium">{formatPHP(bill.drinkingWaterShare)}</span>
             </div>
             <div className="flex justify-between py-2 border-b border-gray-100">
-              <span className="text-gray-600">🗑️ Trash Bags</span>
+              <span className="text-gray-600">🗑️ Trash bags share</span>
               <span className="font-medium">{formatPHP(bill.trashBagShare)}</span>
             </div>
             <div className="flex justify-between py-3 font-bold text-base">

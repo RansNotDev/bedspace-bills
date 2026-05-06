@@ -62,7 +62,9 @@ export default function Reports() {
     <Layout>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
-        <p className="text-gray-500 text-sm mt-1">View and download monthly bill reports (last 18 months)</p>
+        <p className="text-gray-500 text-sm mt-1">
+          View and download monthly bill reports (last 18 months). All amounts are in Philippine Peso (PHP).
+        </p>
       </div>
 
       {/* Month selector */}
@@ -100,12 +102,20 @@ export default function Reports() {
       {cycleDetail ? (
         <div className="space-y-6">
           {/* Summary cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {[
               { label: 'Electricity', value: formatPHP(cycleDetail.cycle.electricityTotal), icon: '⚡' },
               { label: 'Water', value: formatPHP(cycleDetail.cycle.waterBill), icon: '💧' },
-              { label: 'Drinking Water', value: formatPHP(cycleDetail.cycle.drinkingWater), icon: '🚰' },
-              { label: 'Trash Bags', value: formatPHP(cycleDetail.cycle.trashBags), icon: '🗑️' },
+              {
+                label: 'Drinking water',
+                value: formatPHP(cycleDetail.cycle.drinkingWater),
+                icon: '🚰',
+              },
+              {
+                label: 'Trash bags',
+                value: formatPHP(cycleDetail.cycle.trashBags),
+                icon: '🗑️',
+              },
             ].map((item) => (
               <div key={item.label} className="card text-center">
                 <p className="text-2xl mb-1">{item.icon}</p>
@@ -123,19 +133,19 @@ export default function Reports() {
             <div className="grid grid-cols-3 gap-4 text-center mb-4">
               <div>
                 <p className="text-2xl font-bold text-green-600">
-                  {cycleDetail.tenantBills.filter((b) => b.isPaid).length}
+                  {cycleDetail.tenantBills.filter((b) => b.isPaid === true).length}
                 </p>
                 <p className="text-sm text-gray-500">Paid</p>
               </div>
               <div>
                 <p className="text-2xl font-bold text-red-600">
-                  {cycleDetail.tenantBills.filter((b) => !b.isPaid).length}
+                  {cycleDetail.tenantBills.filter((b) => b.isPaid !== true).length}
                 </p>
                 <p className="text-sm text-gray-500">Unpaid</p>
               </div>
               <div>
                 <p className="text-2xl font-bold text-blue-600">
-                  {formatPHP(cycleDetail.tenantBills.filter((b) => b.isPaid).reduce((s, b) => s + b.totalAmount, 0))}
+                  {formatPHP(cycleDetail.tenantBills.filter((b) => b.isPaid === true).reduce((s, b) => s + b.totalAmount, 0))}
                 </p>
                 <p className="text-sm text-gray-500">Collected</p>
               </div>
@@ -146,7 +156,7 @@ export default function Reports() {
               <div className="flex justify-between text-xs text-gray-500 mb-1">
                 <span>Collection Progress</span>
                 <span>
-                  {formatPHP(cycleDetail.tenantBills.filter((b) => b.isPaid).reduce((s, b) => s + b.totalAmount, 0))}
+                  {formatPHP(cycleDetail.tenantBills.filter((b) => b.isPaid === true).reduce((s, b) => s + b.totalAmount, 0))}
                   {' / '}
                   {formatPHP(cycleDetail.tenantBills.reduce((s, b) => s + b.totalAmount, 0))}
                 </span>
@@ -156,7 +166,7 @@ export default function Reports() {
                   className="bg-green-500 h-3 rounded-full transition-all"
                   style={{
                     width: cycleDetail.tenantBills.length > 0
-                      ? `${Math.min(100, (cycleDetail.tenantBills.filter((b) => b.isPaid).reduce((s, b) => s + b.totalAmount, 0) / cycleDetail.tenantBills.reduce((s, b) => s + b.totalAmount, 0)) * 100)}%`
+                      ? `${Math.min(100, (cycleDetail.tenantBills.filter((b) => b.isPaid === true).reduce((s, b) => s + b.totalAmount, 0) / cycleDetail.tenantBills.reduce((s, b) => s + b.totalAmount, 0)) * 100)}%`
                       : '0%',
                   }}
                 />
@@ -177,7 +187,7 @@ export default function Reports() {
                     <th className="text-left px-4 py-3 font-medium text-gray-600">Room</th>
                     <th className="text-right px-4 py-3 font-medium text-gray-600">Electricity</th>
                     <th className="text-right px-4 py-3 font-medium text-gray-600">Water</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-600">Drinking</th>
+                    <th className="text-right px-4 py-3 font-medium text-gray-600">Drink. water</th>
                     <th className="text-right px-4 py-3 font-medium text-gray-600">Trash</th>
                     <th className="text-right px-4 py-3 font-medium text-gray-600">Total</th>
                     <th className="text-center px-4 py-3 font-medium text-gray-600">Status</th>
@@ -202,8 +212,8 @@ export default function Reports() {
                         {formatPHP(bill.totalAmount)}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <span className={bill.isPaid ? 'badge-paid' : 'badge-unpaid'}>
-                          {bill.isPaid ? '✅ Paid' : '⏳ Unpaid'}
+                        <span className={bill.isPaid === true ? 'badge-paid' : 'badge-unpaid'}>
+                          {bill.isPaid === true ? '✅ Paid' : '⏳ Unpaid'}
                         </span>
                       </td>
                     </tr>

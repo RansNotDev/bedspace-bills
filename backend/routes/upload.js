@@ -1,20 +1,19 @@
 const express = require('express');
 const router = express.Router();
-const cloudinary = require('cloudinary').v2;
+const cloudinary = require('cloudinary');
 const multer = require('multer');
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
+// multer-storage-cloudinary 2.x exports a factory function, not `{ CloudinaryStorage }`.
+const createCloudinaryStorage = require('multer-storage-cloudinary');
 const TenantBill = require('../models/TenantBill');
 const { protect, adminOnly } = require('../middleware/authMiddleware');
 
-// Configure Cloudinary
-cloudinary.config({
+cloudinary.v2.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Storage for GCash QR codes (admin uploads)
-const qrStorage = new CloudinaryStorage({
+const qrStorage = createCloudinaryStorage({
   cloudinary,
   params: {
     folder: 'bedspace-bills/qr-codes',
@@ -23,8 +22,7 @@ const qrStorage = new CloudinaryStorage({
   },
 });
 
-// Storage for payment receipts (tenant uploads)
-const receiptStorage = new CloudinaryStorage({
+const receiptStorage = createCloudinaryStorage({
   cloudinary,
   params: {
     folder: 'bedspace-bills/receipts',

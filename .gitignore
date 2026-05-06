@@ -30,3 +30,6 @@ Thumbs.db
 
 # Misc
 *.pem
+
+# Optional personal deployment notes — do not commit secrets (use README Deployment section)
+DEPLOYMENT_GUIDE.md
