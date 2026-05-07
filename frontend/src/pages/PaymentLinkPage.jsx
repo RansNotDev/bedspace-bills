@@ -119,8 +119,33 @@ export default function PaymentLinkPage() {
               <span className="text-gray-600">🗑️ Trash bags share</span>
               <span className="font-medium">{formatPHP(bill.trashBagShare)}</span>
             </div>
+            <div className="flex justify-between py-2 border-b border-gray-100 text-gray-700">
+              <span>Utilities subtotal</span>
+              <span className="font-medium">
+                {formatPHP(
+                  bill.utilitiesSubtotal != null
+                    ? bill.utilitiesSubtotal
+                    : Number(bill.electricityShare || 0) +
+                        Number(bill.waterShare || 0) +
+                        Number(bill.drinkingWaterShare || 0) +
+                        Number(bill.trashBagShare || 0)
+                )}
+              </span>
+            </div>
+            {Number(bill.rentAmount) > 0 && (
+              <div className="flex justify-between py-2 border-b border-gray-100">
+                <span className="text-gray-600">🏠 Monthly rent</span>
+                <span className="font-medium">{formatPHP(bill.rentAmount)}</span>
+              </div>
+            )}
+            {Number(bill.discountPercent) > 0 && (
+              <div className="flex justify-between py-2 border-b border-amber-100 text-amber-900">
+                <span>Discount ({Number(bill.discountPercent)}%)</span>
+                <span className="font-medium">− {formatPHP(bill.discountAmount || 0)}</span>
+              </div>
+            )}
             <div className="flex justify-between py-3 font-bold text-base">
-              <span>TOTAL</span>
+              <span>TOTAL DUE</span>
               <span className="text-blue-700 text-xl">{formatPHP(bill.totalAmount)}</span>
             </div>
           </div>

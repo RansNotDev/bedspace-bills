@@ -13,6 +13,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
+const Bedspace = require('../models/Bedspace');
 
 async function seed() {
   try {
@@ -29,31 +30,45 @@ async function seed() {
 
     const hash = await bcrypt.hash(initialPwd, 10);
 
-    const existing = await User.findOne({ role: 'admin' }).select('+passwordHash');
+    const existing = await User.findOne({ role: { $in: ['admin', 'super_admin'] } }).select(
+      '+passwordHash'
+    );
 
     if (existing) {
+      if (existing.role === 'admin') {
+        existing.role = 'super_admin';
+      }
       if (!existing.passwordHash) {
         existing.passwordHash = hash;
         existing.adminLoginFailures = 0;
         await existing.save();
         console.log(`✅ Set password for existing landlord: "${existing.nickname}"`);
       } else {
+        await existing.save();
         console.log(`Landlord already has a password: "${existing.nickname}"`);
         console.log('To change it, use the app (Change password) or reset after lockout flow.');
+      }
+      const hasBed = await Bedspace.exists({ ownerId: existing._id });
+      if (!hasBed) {
+        await Bedspace.create({ name: 'Main', ownerId: existing._id });
+        console.log('✅ Created default bedspace "Main" for this landlord');
       }
       process.exit(0);
     }
 
     const admin = await User.create({
       nickname: 'admin',
-      role: 'admin',
+      role: 'super_admin',
       roomType: 'non-aircon',
       isActive: true,
       passwordHash: hash,
       adminLoginFailures: 0,
     });
 
-    console.log(`✅ Landlord created. Nickname: "${admin.nickname}"`);
+    await Bedspace.create({ name: 'Main', ownerId: admin._id });
+
+    console.log(`✅ Landlord created. Nickname: "${admin.nickname}" (super_admin)`);
+    console.log('✅ Default bedspace "Main" created — log in and pick it if you have more than one.');
     console.log('Log in with this nickname and ADMIN_INITIAL_PASSWORD from .env');
   } catch (err) {
     console.error('Seed error:', err.message);

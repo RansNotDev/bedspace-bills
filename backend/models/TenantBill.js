@@ -28,6 +28,29 @@ const tenantBillSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    /** Sum of electricity + water + drinking + trash (computed) */
+    utilitiesSubtotal: {
+      type: Number,
+      default: null,
+    },
+    /** Monthly rent snapshot for this billing month */
+    rentAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    /** Applied to (utilities + rent); 0–100 */
+    discountPercent: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+    discountAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     totalAmount: {
       type: Number,
       default: 0,

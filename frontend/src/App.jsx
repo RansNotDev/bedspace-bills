@@ -5,13 +5,27 @@ import 'react-toastify/dist/ReactToastify.css';
 
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
+import AdminBillingHub, {
+  BillingIndexRedirect,
+  BillingGeneratePage,
+  BillingElectricityPage,
+  BillingWaterPage,
+  BillingDrinkingTrashPage,
+  BillingDetailsPage,
+  BillingGcashElectricityPage,
+  BillingGcashWaterPage,
+  BillingGcashPoolsPage,
+} from './pages/AdminBillingHub';
+import AdminRulesPage from './pages/AdminRulesPage';
 import TenantDashboard from './pages/TenantDashboard';
 import CalendarPage from './pages/Calendar';
 import PaymentLinkPage from './pages/PaymentLinkPage';
 import Reports from './pages/Reports';
+import SelectBedspace from './pages/SelectBedspace';
+import { isStaff } from './utils/authHelpers';
 
 // Protected route wrapper
-function ProtectedRoute({ children, requiredRole }) {
+function ProtectedRoute({ children, requiredStaff, requiredTenant }) {
   const token = localStorage.getItem('token');
   const userStr = localStorage.getItem('user');
 
@@ -21,9 +35,12 @@ function ProtectedRoute({ children, requiredRole }) {
 
   const user = JSON.parse(userStr);
 
-  if (requiredRole && user.role !== requiredRole) {
-    // Redirect to appropriate dashboard
-    return <Navigate to={user.role === 'admin' ? '/admin' : '/tenant'} replace />;
+  if (requiredStaff && !isStaff(user)) {
+    return <Navigate to="/tenant" replace />;
+  }
+
+  if (requiredTenant && user.role !== 'tenant') {
+    return <Navigate to={isStaff(user) ? '/admin' : '/tenant'} replace />;
   }
 
   return children;
@@ -31,7 +48,7 @@ function ProtectedRoute({ children, requiredRole }) {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <ToastContainer
         position="top-right"
         autoClose={3000}
@@ -46,19 +63,53 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/pay/:token" element={<PaymentLinkPage />} />
 
-        {/* Admin routes */}
+        {/* Staff */}
+        <Route
+          path="/admin/select-bedspace"
+          element={
+            <ProtectedRoute requiredStaff>
+              <SelectBedspace />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/admin"
           element={
-            <ProtectedRoute requiredRole="admin">
+            <ProtectedRoute requiredStaff>
               <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/billing"
+          element={
+            <ProtectedRoute requiredStaff>
+              <AdminBillingHub />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<BillingIndexRedirect />} />
+          <Route path="generate" element={<BillingGeneratePage />} />
+          <Route path="electricity" element={<BillingElectricityPage />} />
+          <Route path="water" element={<BillingWaterPage />} />
+          <Route path="drinking-trash" element={<BillingDrinkingTrashPage />} />
+          <Route path="details" element={<BillingDetailsPage />} />
+          <Route path="gcash-electricity" element={<BillingGcashElectricityPage />} />
+          <Route path="gcash-water" element={<BillingGcashWaterPage />} />
+          <Route path="gcash-pools" element={<BillingGcashPoolsPage />} />
+        </Route>
+        <Route
+          path="/admin/rules"
+          element={
+            <ProtectedRoute requiredStaff>
+              <AdminRulesPage />
             </ProtectedRoute>
           }
         />
         <Route
           path="/admin/calendar"
           element={
-            <ProtectedRoute requiredRole="admin">
+            <ProtectedRoute requiredStaff>
               <CalendarPage />
             </ProtectedRoute>
           }
@@ -66,7 +117,7 @@ export default function App() {
         <Route
           path="/admin/reports"
           element={
-            <ProtectedRoute requiredRole="admin">
+            <ProtectedRoute requiredStaff>
               <Reports />
             </ProtectedRoute>
           }
@@ -76,7 +127,7 @@ export default function App() {
         <Route
           path="/tenant"
           element={
-            <ProtectedRoute requiredRole="tenant">
+            <ProtectedRoute requiredTenant>
               <TenantDashboard />
             </ProtectedRoute>
           }
@@ -97,5 +148,10 @@ function RootRedirect() {
   if (!token || !userStr) return <Navigate to="/login" replace />;
 
   const user = JSON.parse(userStr);
-  return <Navigate to={user.role === 'admin' ? '/admin' : '/tenant'} replace />;
+
+  if (isStaff(user) && user.needsBedspaceSelection) {
+    return <Navigate to="/admin/select-bedspace" replace />;
+  }
+
+  return <Navigate to={isStaff(user) ? '/admin' : '/tenant'} replace />;
 }

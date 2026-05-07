@@ -1,15 +1,9 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { getStaffMainNav, isStaff, isSuperAdmin } from '../utils/authHelpers';
+import PropertySelectControl from './PropertySelectControl';
 
-const adminNav = [
-  { path: '/admin', label: 'Dashboard', icon: '📊' },
-  { path: '/admin/calendar', label: 'Calendar', icon: '📅' },
-  { path: '/admin/reports', label: 'Reports', icon: '📄' },
-];
-
-const tenantNav = [
-  { path: '/tenant', label: 'My Bills', icon: '💰' },
-];
+const tenantNav = [{ path: '/tenant', label: 'My Bills', icon: '💰' }];
 
 export default function Layout({ children }) {
   const location = useLocation();
@@ -18,8 +12,15 @@ export default function Layout({ children }) {
 
   const userStr = localStorage.getItem('user');
   const user = userStr ? JSON.parse(userStr) : null;
-  const isAdmin = user?.role === 'admin';
-  const navItems = isAdmin ? adminNav : tenantNav;
+  const staff = user && isStaff(user);
+  const mainNavItems = staff ? getStaffMainNav(user) : tenantNav;
+
+  const panelLabel = () => {
+    if (!user) return 'Panel';
+    if (isSuperAdmin(user)) return 'Landlord';
+    if (user.role === 'mini_admin') return 'Mini admin';
+    return 'Tenant';
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -36,26 +37,32 @@ export default function Layout({ children }) {
             <span className="text-2xl">🏠</span>
             <div>
               <p className="font-bold text-gray-900 text-sm leading-tight">Bedspace Bills</p>
-              <p className="text-xs text-gray-500 capitalize">{user?.role} Panel</p>
+              <p className="text-xs text-gray-500">{panelLabel()} panel</p>
             </div>
           </div>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1">
-          {navItems.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                location.pathname === item.path
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              <span>{item.icon}</span>
-              {item.label}
-            </Link>
-          ))}
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+          {staff && (
+            <div className="mb-4 pb-4 border-b border-gray-100">
+              <PropertySelectControl />
+            </div>
+          )}
+          {mainNavItems.map((item) => {
+            const active = location.pathname === item.path;
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  active ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <span>{item.icon}</span>
+                {item.label}
+              </Link>
+            );
+          })}
         </nav>
 
         <div className="p-4 border-t border-gray-200">
@@ -66,7 +73,11 @@ export default function Layout({ children }) {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-900 truncate">{user?.nickname}</p>
               <p className="text-xs text-gray-500 capitalize">
-                {isAdmin ? 'Landlord' : user?.roomType?.replace('-', ' ')}
+                {staff
+                  ? isSuperAdmin(user)
+                    ? 'Landlord'
+                    : user?.activeBedspaceName || '—'
+                  : user?.roomType?.replace('-', ' ')}
               </p>
             </div>
           </div>
@@ -98,22 +109,28 @@ export default function Layout({ children }) {
       {mobileOpen && (
         <div className="md:hidden fixed inset-0 z-10 bg-black/50" onClick={() => setMobileOpen(false)}>
           <div className="bg-white w-64 h-full p-4" onClick={(e) => e.stopPropagation()}>
-            <div className="mt-12 space-y-1">
-              {navItems.map((item) => (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  onClick={() => setMobileOpen(false)}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium ${
-                    location.pathname === item.path
-                      ? 'bg-blue-50 text-blue-700'
-                      : 'text-gray-600 hover:bg-gray-100'
-                  }`}
-                >
-                  <span>{item.icon}</span>
-                  {item.label}
-                </Link>
-              ))}
+            <div className="mt-12 space-y-1 max-h-[calc(100vh-8rem)] overflow-y-auto">
+              {staff && (
+                <div className="mb-3 pb-3 border-b border-gray-100">
+                  <PropertySelectControl />
+                </div>
+              )}
+              {mainNavItems.map((item) => {
+                const active = location.pathname === item.path;
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    onClick={() => setMobileOpen(false)}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium ${
+                      active ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span>{item.icon}</span>
+                    {item.label}
+                  </Link>
+                );
+              })}
               <button
                 onClick={handleLogout}
                 className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50"
@@ -127,9 +144,7 @@ export default function Layout({ children }) {
 
       {/* Main content */}
       <main className="flex-1 md:ml-64 pt-14 md:pt-0">
-        <div className="p-4 md:p-6 max-w-7xl mx-auto">
-          {children}
-        </div>
+        <div className="p-4 md:p-6 max-w-7xl mx-auto">{children}</div>
       </main>
     </div>
   );

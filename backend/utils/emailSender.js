@@ -65,6 +65,17 @@ async function sendPaymentLinkEmail({
   const qrWater = billCycle.gcashQRImages?.water || '';
   const qrOthers = billCycle.gcashQRImages?.others || '';
 
+  const uSub =
+    bill.utilitiesSubtotal != null
+      ? Number(bill.utilitiesSubtotal)
+      : Number(bill.electricityShare || 0) +
+        Number(bill.waterShare || 0) +
+        Number(bill.drinkingWaterShare || 0) +
+        Number(bill.trashBagShare || 0);
+  const rent = Number(bill.rentAmount || 0);
+  const discPct = Number(bill.discountPercent || 0);
+  const discAmt = Number(bill.discountAmount || 0);
+
   const htmlBody = `
 <!DOCTYPE html>
 <html>
@@ -106,6 +117,9 @@ async function sendPaymentLinkEmail({
         <tr><td>💧 Water Share</td><td>${formatPHP(bill.waterShare)}</td></tr>
         <tr><td>🚰 Drinking Water Share</td><td>${formatPHP(bill.drinkingWaterShare)}</td></tr>
         <tr><td>🗑️ Trash Bags Share</td><td>${formatPHP(bill.trashBagShare)}</td></tr>
+        <tr><td><strong>Utilities subtotal</strong></td><td>${formatPHP(uSub)}</td></tr>
+        ${rent > 0 ? `<tr><td>🏠 Monthly rent</td><td>${formatPHP(rent)}</td></tr>` : ''}
+        ${discPct > 0 ? `<tr><td>Discount (${discPct}%)</td><td>− ${formatPHP(discAmt)}</td></tr>` : ''}
         <tr class="total-row"><td>TOTAL</td><td>${formatPHP(bill.totalAmount)}</td></tr>
       </tbody>
     </table>

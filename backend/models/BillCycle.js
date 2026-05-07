@@ -2,6 +2,12 @@ const mongoose = require('mongoose');
 
 const billCycleSchema = new mongoose.Schema(
   {
+    bedspaceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Bedspace',
+      default: null,
+      index: true,
+    },
     month: {
       type: Number,
       required: true,
@@ -55,7 +61,7 @@ const billCycleSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Compound unique index: one bill cycle per month/year
-billCycleSchema.index({ month: 1, year: 1 }, { unique: true });
+// One bill cycle per bedspace per calendar month
+billCycleSchema.index({ bedspaceId: 1, month: 1, year: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('BillCycle', billCycleSchema);

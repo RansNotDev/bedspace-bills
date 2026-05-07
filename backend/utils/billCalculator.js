@@ -4,10 +4,10 @@
  */
 
 /**
- * Calculate each tenant's bill shares for a given bill cycle.
+ * Calculate each tenant's bill shares for a given bill cycle (utilities + monthly rent; discount starts at 0).
  * @param {Array} tenants - Array of active User documents
  * @param {Object} billCycle - BillCycle document
- * @returns {Array} Array of { tenantId, electricityShare, waterShare, drinkingWaterShare, trashBagShare, totalAmount }
+ * @returns {Array} share rows including utilitiesSubtotal, rentAmount, discount fields, totalAmount
  */
 function calculateBills(tenants, billCycle) {
   const activeTenants = tenants.filter((t) => t.isActive);
@@ -17,14 +17,13 @@ function calculateBills(tenants, billCycle) {
 
   const { electricityTotal, waterBill, drinkingWater, trashBags } = billCycle;
 
-  // --- Electricity split (weighted) ---
+  // --- Electricity split (weighted): aircon = 1 unit, non-aircon = 0.5 unit ---
   const airconTenants = activeTenants.filter((t) => t.roomType === 'aircon');
   const nonAirconTenants = activeTenants.filter((t) => t.roomType === 'non-aircon');
 
   const airconCount = airconTenants.length;
   const nonAirconCount = nonAirconTenants.length;
 
-  // Each aircon = 1.0 unit, each non-aircon = 0.5 unit
   const totalUnits = airconCount * 1.0 + nonAirconCount * 0.5;
   const perUnitCost = totalUnits > 0 ? electricityTotal / totalUnits : 0;
 
@@ -40,9 +39,14 @@ function calculateBills(tenants, billCycle) {
     const electricityShare =
       tenant.roomType === 'aircon' ? airconElecShare : nonAirconElecShare;
 
-    const totalAmount = roundTo2(
+    const utilitiesSubtotal = roundTo2(
       electricityShare + waterShare + drinkingWaterShare + trashBagShare
     );
+    const rentAmount = roundTo2(Math.max(0, Number(tenant.monthlyRent) || 0));
+    const subtotalBeforeDiscount = roundTo2(utilitiesSubtotal + rentAmount);
+    const discountPercent = 0;
+    const discountAmount = 0;
+    const totalAmount = subtotalBeforeDiscount;
 
     return {
       tenantId: tenant._id,
@@ -50,6 +54,10 @@ function calculateBills(tenants, billCycle) {
       waterShare,
       drinkingWaterShare,
       trashBagShare,
+      utilitiesSubtotal,
+      rentAmount,
+      discountPercent,
+      discountAmount,
       totalAmount,
     };
   });

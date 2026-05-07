@@ -7,6 +7,8 @@ import {
   requestAdminResetOtp,
   resetAdminPassword,
 } from '../utils/api';
+import { isStaff } from '../utils/authHelpers';
+import { clearPortfolioGeneralSession } from '../utils/portfolioGeneralSession';
 
 export default function Login() {
   const [nickname, setNickname] = useState('');
@@ -25,7 +27,11 @@ export default function Login() {
     const user = localStorage.getItem('user');
     if (token && user) {
       const parsed = JSON.parse(user);
-      navigate(parsed.role === 'admin' ? '/admin' : '/tenant', { replace: true });
+      if (isStaff(parsed) && parsed.needsBedspaceSelection) {
+        navigate('/admin/select-bedspace', { replace: true });
+      } else {
+        navigate(isStaff(parsed) ? '/admin' : '/tenant', { replace: true });
+      }
     }
   }, [navigate]);
 
@@ -62,7 +68,7 @@ export default function Login() {
     }
 
     if (requiresPassword && !password) {
-      toast.error('Please enter your landlord password');
+      toast.error('Please enter your staff password');
       return;
     }
 
@@ -74,8 +80,13 @@ export default function Login() {
         : await login(nickname.trim());
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
+      clearPortfolioGeneralSession();
       toast.success(`Welcome, ${data.user.nickname}!`);
-      navigate(data.user.role === 'admin' ? '/admin' : '/tenant', { replace: true });
+      if (isStaff(data.user) && data.user.needsBedspaceSelection) {
+        navigate('/admin/select-bedspace', { replace: true });
+      } else {
+        navigate(isStaff(data.user) ? '/admin' : '/tenant', { replace: true });
+      }
     } catch (err) {
       const code = err.response?.data?.code;
       const msg = err.response?.data?.message || 'Login failed. Check your nickname.';
@@ -146,8 +157,8 @@ export default function Login() {
           <h1 className="text-2xl font-bold text-gray-900">Bedspace Bill Manager</h1>
           <p className="text-gray-500 text-sm mt-1">
             {requiresPassword
-              ? 'Landlord sign-in (nickname + password)'
-              : 'Tenants: sign in with nickname only'}
+              ? 'Landlord or mini admin — nickname + password'
+              : 'Tenants: sign in with login name only'}
           </p>
         </div>
 
@@ -172,7 +183,7 @@ export default function Login() {
           {requiresPassword === true && (
             <div>
               <label htmlFor="password" className="label">
-                Landlord password
+                Password
               </label>
               <input
                 id="password"
@@ -208,7 +219,7 @@ export default function Login() {
 
         {requiresPassword && adminLocked && (
           <div className="mt-6 p-4 rounded-xl border border-amber-200 bg-amber-50 text-sm">
-            <p className="font-medium text-amber-900 mb-2">Reset landlord password</p>
+            <p className="font-medium text-amber-900 mb-2">Reset staff password</p>
             <p className="text-amber-800 mb-3">
               After 3 wrong passwords, request a 6-digit code by email (Gmail must be configured, and{' '}
               <code className="text-xs bg-amber-100 px-1 rounded">ADMIN_PASSWORD_RESET_EMAIL</code> or your

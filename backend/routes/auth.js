@@ -3,18 +3,45 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const mongoose = require('mongoose');
 const User = require('../models/User');
-const { protect, adminOnly } = require('../middleware/authMiddleware');
+const Bedspace = require('../models/Bedspace');
+const { protect, staffOnly, superAdminOnly } = require('../middleware/authMiddleware');
 const { sendAdminPasswordResetOtp } = require('../utils/emailSender');
+const {
+  isStaffRole,
+  isSuperAdminRole,
+  effectiveTenantPortalVisibility,
+} = require('../utils/roles');
 
 const ADMIN_LOCK_AFTER = 3;
 const OTP_TTL_MS = 15 * 60 * 1000;
 
-function signToken(user) {
-  return jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
+/**
+ * JWT includes optional `bedspaceId` for staff: super admin after choosing a property,
+ * or mini admin (fixed to their property). Tenants omit bedspace in the token.
+ * @param {*} user persisted user doc
+ * @param {import('mongoose').Types.ObjectId|string|null|undefined} superSelectedBedspaceId — for landlord only
+ */
+function signToken(user, superSelectedBedspaceId) {
+  let bedspaceId = null;
+
+  if (isSuperAdminRole(user.role)) {
+    if (superSelectedBedspaceId !== undefined && superSelectedBedspaceId !== null) {
+      bedspaceId = superSelectedBedspaceId.toString();
+    }
+  } else if (user.role === 'mini_admin' && user.bedspaceId) {
+    bedspaceId = user.bedspaceId.toString();
+  }
+
+  return jwt.sign(
+    { id: user._id, role: user.role, bedspaceId },
+    process.env.JWT_SECRET,
+    { expiresIn: '7d' }
+  );
 }
 
-function userResponse(user) {
+function userResponse(user, extras = {}) {
   return {
     _id: user._id,
     nickname: user.nickname,
@@ -22,12 +49,17 @@ function userResponse(user) {
     roomType: user.roomType,
     moveInDate: user.moveInDate,
     email: user.email,
+    bedspaceId: user.bedspaceId || null,
+    monthlyRent: user.monthlyRent != null ? user.monthlyRent : 0,
+    miniAdminPermissions: user.miniAdminPermissions,
+    tenantPortalVisibility: effectiveTenantPortalVisibility(user),
+    ...extras,
   };
 }
 
 /**
  * POST /api/auth/preflight
- * Whether this nickname needs a password (admin / landlord only).
+ * Whether this nickname needs a password (landlord or mini admin).
  */
 router.post('/preflight', async (req, res) => {
   try {
@@ -43,7 +75,7 @@ router.post('/preflight', async (req, res) => {
 
     return res.json({
       found: true,
-      requiresPassword: user.role === 'admin',
+      requiresPassword: isStaffRole(user.role) && user.role !== 'tenant',
     });
   } catch (err) {
     console.error('Preflight error:', err);
@@ -53,7 +85,7 @@ router.post('/preflight', async (req, res) => {
 
 /**
  * POST /api/auth/login
- * Tenants: nickname only. Admin: nickname + password.
+ * Tenants: nickname only. Landlord / mini admin: nickname + password.
  */
 router.post('/login', async (req, res) => {
   try {
@@ -73,19 +105,33 @@ router.post('/login', async (req, res) => {
     }
 
     if (user.role === 'tenant') {
+      if (!user.bedspaceId) {
+        return res.status(403).json({
+          message: 'Tenant is not assigned to a bedspace. Ask your landlord to fix this in the admin panel.',
+        });
+      }
       const token = signToken(user);
       return res.json({ token, user: userResponse(user) });
     }
 
-    // Admin
+    if (!isStaffRole(user.role)) {
+      return res.status(403).json({ message: 'This account cannot sign in here' });
+    }
+
     if (!password || !String(password).length) {
-      return res.status(400).json({ message: 'Password required for landlord login' });
+      return res.status(400).json({ message: 'Password required for staff login' });
+    }
+
+    if (user.role === 'mini_admin' && !user.bedspaceId) {
+      return res.status(403).json({
+        message: 'Mini admin is not assigned to a bedspace. Ask your landlord.',
+      });
     }
 
     if (!user.passwordHash) {
       return res.status(503).json({
         message:
-          'Landlord password not set. Run: node scripts/seed.js (set ADMIN_INITIAL_PASSWORD in .env first).',
+          'Password not set for this staff account. Your landlord must set a password or re-create the account.',
       });
     }
 
@@ -123,8 +169,45 @@ router.post('/login', async (req, res) => {
     user.adminResetOtpExpires = null;
     await user.save();
 
+    if (isSuperAdminRole(user.role)) {
+      const bedspaces = await Bedspace.find({ ownerId: user._id }).sort({ name: 1 }).lean();
+
+      let selectedId = null;
+      let activeBedspaceName = null;
+      if (bedspaces.length === 1) {
+        selectedId = bedspaces[0]._id;
+        activeBedspaceName = bedspaces[0].name;
+      }
+
+      const token = signToken(user, selectedId);
+      const needsBedspaceSelection = bedspaces.length > 1 && !selectedId;
+
+      return res.json({
+        token,
+        user: userResponse(user, {
+          bedspaces: bedspaces.map((b) => ({ _id: b._id, name: b.name, locationName: b.locationName || '' })),
+          needsBedspaceSelection,
+          activeBedspaceId: selectedId ? String(selectedId) : null,
+          activeBedspaceName,
+        }),
+      });
+    }
+
+    // mini_admin
     const token = signToken(user);
-    res.json({ token, user: userResponse(user) });
+    let spaceName = null;
+    if (user.bedspaceId) {
+      const b = await Bedspace.findById(user.bedspaceId).select('name').lean();
+      spaceName = b?.name || null;
+    }
+    return res.json({
+      token,
+      user: userResponse(user, {
+        needsBedspaceSelection: false,
+        activeBedspaceId: user.bedspaceId ? String(user.bedspaceId) : null,
+        activeBedspaceName: spaceName,
+      }),
+    });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ message: 'Server error' });
@@ -132,8 +215,45 @@ router.post('/login', async (req, res) => {
 });
 
 /**
+ * POST /api/auth/select-bedspace
+ * Landlord only: issue a new JWT scoped to a bedspace they own.
+ * Body: { bedspaceId }
+ */
+router.post('/select-bedspace', protect, superAdminOnly, async (req, res) => {
+  try {
+    const raw = req.body.bedspaceId && String(req.body.bedspaceId).trim();
+    if (!raw || !mongoose.isValidObjectId(raw)) {
+      return res.status(400).json({ message: 'Valid bedspaceId is required' });
+    }
+
+    const bed = await Bedspace.findOne({ _id: raw, ownerId: req.user._id });
+    if (!bed) {
+      return res.status(404).json({ message: 'Bedspace not found' });
+    }
+
+    const bedspaces = await Bedspace.find({ ownerId: req.user._id }).sort({ name: 1 }).lean();
+    const token = signToken(req.user, bed._id);
+
+    res.json({
+      token,
+      user: userResponse(req.user, {
+        bedspaces: bedspaces.map((b) => ({ _id: b._id, name: b.name, locationName: b.locationName || '' })),
+        needsBedspaceSelection: false,
+        activeBedspaceId: String(bed._id),
+        activeBedspaceName: bed.name,
+      }),
+    });
+  } catch (err) {
+    console.error('Select bedspace error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+const STAFF_ROLES_WITH_LOCKOUT = ['admin', 'super_admin', 'mini_admin'];
+
+/**
  * POST /api/auth/admin/request-reset-otp
- * After lockout: email a one-time code to ADMIN_PASSWORD_RESET_EMAIL or the admin user's email.
+ * After lockout: email a one-time code (landlord or mini admin).
  */
 router.post('/admin/request-reset-otp', async (req, res) => {
   try {
@@ -142,12 +262,14 @@ router.post('/admin/request-reset-otp', async (req, res) => {
       return res.status(400).json({ message: 'Nickname is required' });
     }
 
-    const user = await User.findOne({ nickname, role: 'admin', isActive: true }).select(
-      '+adminLoginFailures +adminResetOtpHash +adminResetOtpExpires +passwordHash'
-    );
+    const user = await User.findOne({
+      nickname,
+      isActive: true,
+      role: { $in: STAFF_ROLES_WITH_LOCKOUT },
+    }).select('+adminLoginFailures +adminResetOtpHash +adminResetOtpExpires +passwordHash');
 
     if (!user || !user.passwordHash) {
-      return res.status(404).json({ message: 'Landlord account not found' });
+      return res.status(404).json({ message: 'Staff account not found' });
     }
 
     if (user.adminLoginFailures < ADMIN_LOCK_AFTER) {
@@ -160,7 +282,7 @@ router.post('/admin/request-reset-otp', async (req, res) => {
     if (!toEmail) {
       return res.status(400).json({
         message:
-          'No email for reset. Set ADMIN_PASSWORD_RESET_EMAIL in .env or add an email to the landlord account in the database.',
+          'No email for reset. Set ADMIN_PASSWORD_RESET_EMAIL in .env or add an email to this account.',
       });
     }
 
@@ -184,7 +306,6 @@ router.post('/admin/request-reset-otp', async (req, res) => {
 
 /**
  * POST /api/auth/admin/reset-password
- * Complete reset with OTP + new password (after lockout).
  */
 router.post('/admin/reset-password', async (req, res) => {
   try {
@@ -200,12 +321,14 @@ router.post('/admin/reset-password', async (req, res) => {
       return res.status(400).json({ message: 'New password must be at least 8 characters' });
     }
 
-    const user = await User.findOne({ nickname, role: 'admin', isActive: true }).select(
-      '+passwordHash +adminLoginFailures +adminResetOtpHash +adminResetOtpExpires'
-    );
+    const user = await User.findOne({
+      nickname,
+      isActive: true,
+      role: { $in: STAFF_ROLES_WITH_LOCKOUT },
+    }).select('+passwordHash +adminLoginFailures +adminResetOtpHash +adminResetOtpExpires');
 
     if (!user) {
-      return res.status(404).json({ message: 'Landlord account not found' });
+      return res.status(404).json({ message: 'Staff account not found' });
     }
 
     if (!user.adminResetOtpHash || !user.adminResetOtpExpires) {
@@ -216,8 +339,8 @@ router.post('/admin/reset-password', async (req, res) => {
       return res.status(400).json({ message: 'Reset code expired. Request a new one.' });
     }
 
-    const hash = crypto.createHmac('sha256', process.env.JWT_SECRET).update(otp).digest('hex');
-    if (hash !== user.adminResetOtpHash) {
+    const verifyHash = crypto.createHmac('sha256', process.env.JWT_SECRET).update(otp).digest('hex');
+    if (verifyHash !== user.adminResetOtpHash) {
       return res.status(400).json({ message: 'Invalid code' });
     }
 
@@ -236,9 +359,9 @@ router.post('/admin/reset-password', async (req, res) => {
 
 /**
  * POST /api/auth/change-password
- * Logged-in landlord: change password whenalready signed in.
+ * Logged-in staff (landlord or mini admin).
  */
-router.post('/change-password', protect, adminOnly, async (req, res) => {
+router.post('/change-password', protect, staffOnly, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
 
@@ -274,15 +397,37 @@ router.post('/change-password', protect, adminOnly, async (req, res) => {
  * GET /api/auth/me
  */
 router.get('/me', protect, async (req, res) => {
-  res.json({
-    _id: req.user._id,
-    nickname: req.user.nickname,
-    role: req.user.role,
-    roomType: req.user.roomType,
-    moveInDate: req.user.moveInDate,
-    email: req.user.email,
-    isActive: req.user.isActive,
-  });
+  try {
+    const payload = {
+      _id: req.user._id,
+      nickname: req.user.nickname,
+      role: req.user.role,
+      roomType: req.user.roomType,
+      moveInDate: req.user.moveInDate,
+      email: req.user.email,
+      isActive: req.user.isActive,
+      bedspaceId: req.user.bedspaceId || null,
+      monthlyRent: req.user.monthlyRent != null ? req.user.monthlyRent : 0,
+      miniAdminPermissions: req.user.miniAdminPermissions,
+      tenantPortalVisibility: effectiveTenantPortalVisibility(req.user),
+      activeBedspaceId: req.bedspaceContextId ? String(req.bedspaceContextId) : null,
+    };
+
+    if (isSuperAdminRole(req.user.role)) {
+      const list = await Bedspace.find({ ownerId: req.user._id }).sort({ name: 1 }).lean();
+      payload.bedspaces = list.map((b) => ({
+        _id: b._id,
+        name: b.name,
+        locationName: b.locationName || '',
+      }));
+      payload.needsBedspaceSelection = list.length > 1 && !req.bedspaceContextId;
+    }
+
+    res.json(payload);
+  } catch (err) {
+    console.error('Me error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
 });
 
 module.exports = router;

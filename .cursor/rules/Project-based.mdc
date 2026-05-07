@@ -1,0 +1,59 @@
+---
+alwaysApply: true
+---
+
+## PROJECT IDENTITY
+This is a MERN stack web application.
+Frontend: React + Vite + Tailwind CSS
+Backend: Node.js + Express.js
+Database: MongoDB Atlas + Mongoose
+Deployment: Vercel (frontend) + Render (backend)
+Package manager: npm
+
+## FOLDER STRUCTURE
+Root contains two folders:
+- /client — React frontend (ES modules, import/export)
+- /server — Express backend (CommonJS, require/module.exports)
+
+Never create files outside of /client or /server unless I ask.
+Never mix CommonJS and ES modules in the same folder.
+
+## NAMING CONVENTIONS
+- React components: PascalCase (UserCard.jsx, AdminDashboard.jsx)
+- Utility files: camelCase (calculateBills.js, sendEmail.js)
+- Route files: camelCase (auth.js, tenants.js)
+- MongoDB models: PascalCase singular (Tenant.js, MonthlyBill.js)
+- CSS classes: Tailwind utility classes only — no custom class names unless necessary
+- Environment variables: SCREAMING_SNAKE_CASE (MONGODB_URI, JWT_SECRET)
+
+## CODE CONVENTIONS
+Backend (/server):
+- CommonJS only: const x = require('x') and module.exports = {}
+- All routes wrapped in try/catch
+- Response format always: { success: Boolean, message: String, data: any }
+- All secrets via process.env — never hardcoded
+- Mongoose models in /server/models/
+- Route handlers in /server/routes/
+- Reusable logic in /server/utils/
+
+Frontend (/client):
+- ES modules only: import / export
+- All API calls through /client/src/api/axios.js
+- Tailwind CSS only for styling
+- React Router for all navigation
+- No inline style objects unless absolutely necessary
+
+## FILES TO NEVER TOUCH
+- .env (never read, never write, never show contents)
+- package-lock.json
+- node_modules/
+- dist/ or build/
+
+## DEPENDENCIES ALREADY INSTALLED
+Server: express, mongoose, jsonwebtoken, bcryptjs, nodemailer,
+        multer, cloudinary, date-fns-tz, cors, dotenv
+Client: react, react-dom, react-router-dom, axios,
+        tailwindcss, date-fns, pdfmake
+
+Do not suggest installing a library that is already in this list.
+Do not suggest a paid library or service.

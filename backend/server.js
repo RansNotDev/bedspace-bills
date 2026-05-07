@@ -33,6 +33,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/super', require('./routes/superAdmin'));
 app.use('/api/admin', adminRoutes);
 app.use('/api/bills', billsRoutes);
 app.use('/api/upload', uploadRoutes);

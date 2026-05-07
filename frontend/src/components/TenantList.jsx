@@ -2,22 +2,34 @@ import React, { useState } from 'react';
 import { toast } from 'react-toastify';
 import { createTenant, updateTenant, deleteTenant } from '../utils/api';
 import { formatPHDate } from '../utils/helpers';
+import { getStoredUser, isSuperAdmin } from '../utils/authHelpers';
 
 const EMPTY_FORM = {
   nickname: '',
   roomType: 'non-aircon',
   moveInDate: '',
   email: '',
+  monthlyRent: '',
+  bedspaceId: '',
 };
 
-export default function TenantList({ tenants, onRefresh }) {
+/**
+ * Tenants are always created under the bedspace in your JWT (sidebar “Switch property” for landlords).
+ * @param {object} props
+ * @param {Array<{_id:string,name:string,locationName?:string}>|null} [props.bedspaceChoices] — landlord: pick property when adding
+ */
+export default function TenantList({ tenants, onRefresh, propertyHeadline, bedspaceChoices }) {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [loading, setLoading] = useState(false);
 
   const openAdd = () => {
-    setForm(EMPTY_FORM);
+    const u = getStoredUser();
+    setForm({
+      ...EMPTY_FORM,
+      bedspaceId: u?.activeBedspaceId ? String(u.activeBedspaceId) : '',
+    });
     setEditingId(null);
     setShowForm(true);
   };
@@ -28,6 +40,8 @@ export default function TenantList({ tenants, onRefresh }) {
       roomType: tenant.roomType,
       moveInDate: tenant.moveInDate ? tenant.moveInDate.split('T')[0] : '',
       email: tenant.email || '',
+      monthlyRent: tenant.monthlyRent != null ? String(tenant.monthlyRent) : '',
+      bedspaceId: '',
     });
     setEditingId(tenant._id);
     setShowForm(true);
@@ -38,11 +52,20 @@ export default function TenantList({ tenants, onRefresh }) {
     setLoading(true);
     try {
       if (editingId) {
-        await updateTenant(editingId, form);
+        const { bedspaceId: _b, ...updatePayload } = form;
+        await updateTenant(editingId, updatePayload);
         toast.success('Tenant updated');
       } else {
-        await createTenant(form);
+        const payload = { ...form };
+        if (!bedspaceChoices || bedspaceChoices.length <= 1) {
+          delete payload.bedspaceId;
+        }
+        await createTenant(payload);
         toast.success('Tenant added');
+        const u = getStoredUser();
+        if (isSuperAdmin(u) && form.bedspaceId && String(form.bedspaceId) !== String(u?.activeBedspaceId)) {
+          toast.info('Tenant is on another property — switch property in the sidebar to see them in this list.');
+        }
       }
       setShowForm(false);
       onRefresh();
@@ -79,6 +102,15 @@ export default function TenantList({ tenants, onRefresh }) {
 
   return (
     <div>
+      {propertyHeadline && (
+        <div className="mb-4 rounded-lg border border-teal-100 bg-teal-50/80 px-4 py-3 text-sm text-teal-900">
+          <p className="font-medium text-teal-950">Property / location</p>
+          <p className="mt-0.5">
+            List shows tenants for <strong>{propertyHeadline}</strong> (sidebar <strong>Property</strong>). When adding a
+            tenant, landlords with multiple locations can pick which property they belong to.
+          </p>
+        </div>
+      )}
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-gray-900">
           Tenants ({activeTenants.length} active)
@@ -95,7 +127,28 @@ export default function TenantList({ tenants, onRefresh }) {
             <h3 className="text-lg font-semibold mb-4">
               {editingId ? 'Edit Tenant' : 'Add New Tenant'}
             </h3>
+            {propertyHeadline && !editingId && (
+              <p className="text-xs text-gray-600 mb-4 -mt-2">Adding to: {propertyHeadline}</p>
+            )}
             <form onSubmit={handleSubmit} className="space-y-4">
+              {bedspaceChoices && bedspaceChoices.length > 1 && !editingId && (
+                <div>
+                  <label className="label">Property / location *</label>
+                  <select
+                    className="input"
+                    required
+                    value={form.bedspaceId}
+                    onChange={(e) => setForm({ ...form, bedspaceId: e.target.value })}
+                  >
+                    {bedspaceChoices.map((b) => (
+                      <option key={b._id} value={b._id}>
+                        {b.locationName ? `${b.locationName} (${b.name})` : b.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">Which bedspace this tenant rents in.</p>
+                </div>
+              )}
               <div>
                 <label className="label">Nickname *</label>
                 <input
@@ -125,6 +178,21 @@ export default function TenantList({ tenants, onRefresh }) {
                   value={form.moveInDate}
                   onChange={(e) => setForm({ ...form, moveInDate: e.target.value })}
                 />
+              </div>
+              <div>
+                <label className="label">Monthly rent (PHP)</label>
+                <input
+                  type="number"
+                  className="input"
+                  min={0}
+                  step="0.01"
+                  value={form.monthlyRent}
+                  onChange={(e) => setForm({ ...form, monthlyRent: e.target.value })}
+                  placeholder="0 = utilities only"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Added to each new bill; you can override per month in Bill Details.
+                </p>
               </div>
               <div>
                 <label className="label">Email (optional)</label>
@@ -161,6 +229,7 @@ export default function TenantList({ tenants, onRefresh }) {
               <th className="text-left px-4 py-3 font-medium text-gray-600">Nickname</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Room</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Move-in</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600">Rent / mo</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Email</th>
               <th className="text-right px-4 py-3 font-medium text-gray-600">Actions</th>
             </tr>
@@ -168,7 +237,7 @@ export default function TenantList({ tenants, onRefresh }) {
           <tbody className="divide-y divide-gray-100">
             {activeTenants.length === 0 && (
               <tr>
-                <td colSpan={5} className="text-center py-8 text-gray-400">
+                <td colSpan={6} className="text-center py-8 text-gray-400">
                   No active tenants yet. Add one above.
                 </td>
               </tr>
@@ -182,6 +251,11 @@ export default function TenantList({ tenants, onRefresh }) {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-gray-600">{formatPHDate(tenant.moveInDate)}</td>
+                <td className="px-4 py-3 text-gray-600 tabular-nums">
+                  {tenant.monthlyRent != null && Number(tenant.monthlyRent) > 0
+                    ? `₱${Number(tenant.monthlyRent).toLocaleString('en-PH')}`
+                    : '—'}
+                </td>
                 <td className="px-4 py-3 text-gray-600">{tenant.email || '—'}</td>
                 <td className="px-4 py-3 text-right">
                   <button

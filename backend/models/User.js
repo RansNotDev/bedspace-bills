@@ -10,8 +10,36 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['admin', 'tenant'],
+      enum: ['super_admin', 'admin', 'mini_admin', 'tenant'],
       default: 'tenant',
+    },
+    bedspaceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Bedspace',
+      default: null,
+      index: true,
+    },
+    /**
+     * Landlord-defined flags for mini admins (one bedspace only).
+     * Omitted keys default to “allowed” in the API layer.
+     */
+    miniAdminPermissions: {
+      manageTenants: { type: Boolean, default: true },
+      manageBillCycles: { type: Boolean, default: true },
+      generateBills: { type: Boolean, default: true },
+      sendPaymentLinks: { type: Boolean, default: true },
+      markPaid: { type: Boolean, default: true },
+      uploadQR: { type: Boolean, default: true },
+      viewReports: { type: Boolean, default: true },
+      viewCalendar: { type: Boolean, default: true },
+    },
+    /**
+     * What this tenant can see in their portal (landlord configures per tenant).
+     */
+    tenantPortalVisibility: {
+      showCurrentBill: { type: Boolean, default: true },
+      showBillHistory: { type: Boolean, default: true },
+      showPaymentUpload: { type: Boolean, default: true },
     },
     roomType: {
       type: String,
@@ -21,6 +49,12 @@ const userSchema = new mongoose.Schema(
     moveInDate: {
       type: Date,
       default: null,
+    },
+    /** Monthly rent (PHP) included in each generated bill for this tenant */
+    monthlyRent: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
     email: {
       type: String,

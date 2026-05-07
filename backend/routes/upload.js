@@ -2,10 +2,16 @@ const express = require('express');
 const router = express.Router();
 const cloudinary = require('cloudinary');
 const multer = require('multer');
-// multer-storage-cloudinary 2.x exports a factory function, not `{ CloudinaryStorage }`.
 const createCloudinaryStorage = require('multer-storage-cloudinary');
 const TenantBill = require('../models/TenantBill');
-const { protect, adminOnly } = require('../middleware/authMiddleware');
+const BillCycle = require('../models/BillCycle');
+const {
+  protect,
+  staffOnly,
+  requireBedspaceContext,
+  requireMiniAdminPermission,
+} = require('../middleware/authMiddleware');
+const { isStaffRole } = require('../utils/roles');
 
 cloudinary.v2.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -33,64 +39,74 @@ const receiptStorage = createCloudinaryStorage({
 
 const uploadQR = multer({
   storage: qrStorage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  limits: { fileSize: 5 * 1024 * 1024 },
 });
 
 const uploadReceipt = multer({
   storage: receiptStorage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  limits: { fileSize: 10 * 1024 * 1024 },
 });
 
 /**
  * POST /api/upload/qr/:cycleId/:type
- * Admin uploads GCash QR code image for a bill cycle
- * type: electricity | water | others
  */
-router.post('/qr/:cycleId/:type', protect, adminOnly, uploadQR.single('qr'), async (req, res) => {
-  try {
-    const { cycleId, type } = req.params;
-    const validTypes = ['electricity', 'water', 'others'];
+router.post(
+  '/qr/:cycleId/:type',
+  protect,
+  staffOnly,
+  requireBedspaceContext,
+  requireMiniAdminPermission('uploadQR'),
+  uploadQR.single('qr'),
+  async (req, res) => {
+    try {
+      const { cycleId, type } = req.params;
+      const validTypes = ['electricity', 'water', 'others'];
 
-    if (!validTypes.includes(type)) {
-      return res.status(400).json({ message: 'Invalid QR type. Use: electricity, water, others' });
+      if (!validTypes.includes(type)) {
+        return res.status(400).json({ message: 'Invalid QR type. Use: electricity, water, others' });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ message: 'No file uploaded' });
+      }
+
+      const imageUrl = req.file.path;
+
+      const cycle = await BillCycle.findOneAndUpdate(
+        { _id: cycleId, bedspaceId: req.bedspaceContextId },
+        { [`gcashQRImages.${type}`]: imageUrl },
+        { new: true }
+      );
+
+      if (!cycle) return res.status(404).json({ message: 'Bill cycle not found' });
+
+      res.json({ message: 'QR code uploaded', imageUrl, cycle });
+    } catch (err) {
+      console.error('QR upload error:', err);
+      res.status(500).json({ message: 'Upload failed', error: err.message });
     }
-
-    if (!req.file) {
-      return res.status(400).json({ message: 'No file uploaded' });
-    }
-
-    const BillCycle = require('../models/BillCycle');
-    const imageUrl = req.file.path;
-
-    const cycle = await BillCycle.findByIdAndUpdate(
-      cycleId,
-      { [`gcashQRImages.${type}`]: imageUrl },
-      { new: true }
-    );
-
-    if (!cycle) return res.status(404).json({ message: 'Bill cycle not found' });
-
-    res.json({ message: 'QR code uploaded', imageUrl, cycle });
-  } catch (err) {
-    console.error('QR upload error:', err);
-    res.status(500).json({ message: 'Upload failed', error: err.message });
   }
-});
+);
 
 /**
  * POST /api/upload/receipt/:tenantBillId
- * Tenant uploads payment receipt (authenticated)
  */
 router.post('/receipt/:tenantBillId', protect, uploadReceipt.single('receipt'), async (req, res) => {
   try {
-    const bill = await TenantBill.findById(req.params.tenantBillId);
-    if (!bill) return res.status(404).json({ message: 'Tenant bill not found' });
+    const bill = await TenantBill.findById(req.params.tenantBillId).populate('billCycleId');
+    if (!bill || !bill.billCycleId) {
+      return res.status(404).json({ message: 'Tenant bill not found' });
+    }
 
-    // Only the tenant who owns the bill or admin can upload
-    if (
-      req.user.role !== 'admin' &&
-      bill.tenantId.toString() !== req.user._id.toString()
-    ) {
+    const isOwner = bill.tenantId.toString() === req.user._id.toString();
+    let staffAllowed = false;
+    if (isStaffRole(req.user.role)) {
+      if (req.bedspaceContextId && String(bill.billCycleId.bedspaceId) === String(req.bedspaceContextId)) {
+        staffAllowed = true;
+      }
+    }
+
+    if (!isOwner && !staffAllowed) {
       return res.status(403).json({ message: 'Not authorized' });
     }
 
@@ -115,14 +131,12 @@ router.post('/receipt/:tenantBillId', protect, uploadReceipt.single('receipt'), 
 
 /**
  * POST /api/upload/receipt-public/:token
- * Public receipt upload via payment link token (no auth required)
  */
 router.post('/receipt-public/:token', uploadReceipt.single('receipt'), async (req, res) => {
   try {
     const bill = await TenantBill.findOne({ paymentLinkToken: req.params.token });
     if (!bill) return res.status(404).json({ message: 'Invalid payment link' });
 
-    // Check expiry
     if (bill.paymentLinkExpiry && bill.paymentLinkExpiry < new Date()) {
       return res.status(410).json({ message: 'This payment link has expired' });
     }
